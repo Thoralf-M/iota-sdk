@@ -6,62 +6,63 @@ env:
   CARGO_INCREMENTAL: 0
 
 jobs:
-  publish-nodejs:
-    runs-on: ubuntu-latest
+  # publish-nodejs:
+  #   runs-on: ubuntu-latest
 
-    defaults:
-      run:
-        working-directory: bindings/nodejs
+  #   defaults:
+  #     run:
+  #       working-directory: bindings/nodejs
 
-    steps:
-      - uses: actions/checkout@v3
+  #   steps:
+  #     - uses: actions/checkout@v3
 
-      - name: Set up Rust
-        uses: ./.github/actions/setup-rust
+  #     - name: Set up Rust
+  #       uses: ./.github/actions/setup-rust
 
-      # Required for ledger-nano
-      - name: Install required packages
-        run: |
-          sudo apt-get update
-          sudo apt-get install libudev-dev libusb-1.0-0-dev
+  #     # Required for ledger-nano
+  #     - name: Install required packages
+  #       run: |
+  #         sudo apt-get update
+  #         sudo apt-get install libudev-dev libusb-1.0-0-dev
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v2
-        with:
-          node-version: "18.x"
-          registry-url: "https://registry.npmjs.org"
+  #     - name: Set up Node.js
+  #       uses: actions/setup-node@v2
+  #       with:
+  #         node-version: "18.x"
+  #         registry-url: "https://registry.npmjs.org"
 
-      - name: Install Yarn
-        run: npm i -g yarn
+  #     - name: Install Yarn
+  #       run: npm i -g yarn
 
-      - name: Install JS dependencies
-        run: yarn
+  #     - name: Install JS dependencies
+  #       run: yarn
 
-      - name: Build project
-        run: yarn build
+  #     - name: Build project
+  #       run: yarn build
 
-      - name: Update Cargo.toml with git
-        run:  sed -i 's#path = "../core"#git = "https://github.com/iotaledger/iota-sdk", rev = "'$GITHUB_SHA'"#g' Cargo.toml 
+  #     - name: Update Cargo.toml with git
+  #       run:  sed -i 's#path = "../core"#git = "https://github.com/iotaledger/iota-sdk", rev = "'$GITHUB_SHA'"#g' Cargo.toml 
 
-      - name: Print Cargo.toml
-        run: cat Cargo.toml
+  #     - name: Print Cargo.toml
+  #       run: cat Cargo.toml
 
-      - name: Publish nodejs bindings to NPM
-        shell: sh
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public
+  #     - name: Publish nodejs bindings to NPM
+  #       shell: sh
+  #       env:
+  #         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+  #       run: npm publish --access public
 
   nodejs-binding-prebuild:
     runs-on: ${{ matrix.os }}
-    needs: publish-nodejs
+    # needs: publish-nodejs
     strategy:
       fail-fast: false
       matrix:
         # The GitHub hosted Windows 2022 image comes with Visual Studio 2022, but node-gyp
         # (which is used by neon-sys) sadly fails to recognize it. As a mitigation, we still run the
         # tests on Windows 2019, until we can figure out a way to fix the problem.
-        os: [ubuntu-20.04, macos-13, windows-2019]
+        # os: [ubuntu-20.04, macos-13, windows-2019]
+        os: [macos-13]
         node-version: ["18.x"]
 
     steps:
@@ -119,6 +120,10 @@ jobs:
         run: echo "MACOSX_DEPLOYMENT_TARGET=10.13" >> $GITHUB_ENV
         if: matrix.os == 'macos-13'
 
+      - name: Set deployment target (macOS)
+        if: matrix.os == 'macos-13'
+        run: rustup target add aarch64-apple-darwin
+
       - name: Get current date
         run: echo "CURRENT_DATE=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
         if: matrix.os == 'macos-13' || ${{ startsWith(matrix.os, 'ubuntu') }}
@@ -169,12 +174,26 @@ jobs:
         working-directory: bindings/nodejs
 
       - name: Build Node.js prebuild (x64)
+        if: ${{ !startsWith(matrix.os, 'macos') }}
         run: yarn run prebuild-x64
         working-directory: bindings/nodejs
 
       - name: Build Node.js prebuild (arm64)
-        run: yarn run prebuild-arm64
+        if: ${{ !startsWith(matrix.os, 'macos') }}
+        run: |
+              yarn run prebuild-arm64
         working-directory: bindings/nodejs
+
+      - name: Build Node.js prebuild (darwin-x64+arm64)
+        if: ${{ startsWith(matrix.os, 'macos') }}
+        run: |
+              yarn run prebuild-darwin-x64+arm64
+        working-directory: bindings/nodejs
+
+      - name: Sign index.node (arm64)
+        if: ${{ startsWith(matrix.os, 'macos') }}
+        working-directory: bindings/nodejs/build/Release
+        run: codesign -s - index.node
 
       - name: Upload prebuild to GitHub release
         run: npx prebuild --upload-all ${{ secrets.GITHUB_TOKEN }} --tag-prefix iota-sdk-nodejs-v
