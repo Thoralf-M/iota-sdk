@@ -29,23 +29,39 @@ jobs:
         with:
           version: "0.2.87"
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v2
+      # - name: Set up Node.js
+      #   uses: actions/setup-node@v2
+      #   with:
+      #     node-version: "18.x"
+      #     registry-url: "https://registry.npmjs.org"
+
+      # - name: Install Yarn
+      #   run: npm i -g yarn
+
+      # - name: Install JS dependencies
+      #   run: yarn
+
+      # - name: Build project
+      #   run: yarn build
+
+      # - name: Publish WASM bindings to NPM
+      #   shell: sh
+      #   env:
+      #     NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      #   run: npm publish --access public
+
+      - name: Prepare Github release
+        id: prepare_release
+        run: |
+          # yarn pack
+          touch test.tgz
+          echo "tag_name=iota-sdk-wasm-v$(npm pkg get version --workspaces=false | tr -d \")" >> "$GITHUB_OUTPUT"
+
+      - name: Upload package to Github release
+        uses: softprops/action-gh-release@v1
         with:
-          node-version: "18.x"
-          registry-url: "https://registry.npmjs.org"
-
-      - name: Install Yarn
-        run: npm i -g yarn
-
-      - name: Install JS dependencies
-        run: yarn
-
-      - name: Build project
-        run: yarn build
-
-      - name: Publish WASM bindings to NPM
-        shell: sh
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public
+          token: ${{ secrets.GITHUB_TOKEN }}
+          body: https://github.com/iotaledger/iota-sdk/blob/develop/bindings/wasm/CHANGELOG.md
+          files: bindings/wasm/*.tgz
+          tag_name: ${{ steps.prepare_release.outputs.tag_name }}
+          prerelease: true
