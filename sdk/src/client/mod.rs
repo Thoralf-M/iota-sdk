@@ -35,6 +35,8 @@ macro_rules! lazy_static {
     }};
 }
 
+// test to make the CI run
+
 pub mod api;
 pub mod builder;
 pub mod constants;
