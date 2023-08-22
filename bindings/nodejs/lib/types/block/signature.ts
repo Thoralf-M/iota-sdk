@@ -40,9 +40,9 @@ class Ed25519Signature extends Signature {
      */
     signature: HexEncodedString;
 
-    constructor(publicKey: Ed25519PublicKey, signature: HexEncodedString) {
+    constructor(publicKey: HexEncodedString, signature: HexEncodedString) {
         super(SignatureType.Ed25519);
-        this.publicKey = publicKey;
+        this.publicKey = new Ed25519PublicKey(publicKey);
         this.signature = signature;
     }
 }
