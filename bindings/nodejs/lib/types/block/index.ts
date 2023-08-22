@@ -8,4 +8,5 @@ export * from './payload/index';
 export * from './address';
 export * from './id';
 export * from './block';
+export * from './public-key';
 export * from './signature';
