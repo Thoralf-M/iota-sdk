@@ -28,7 +28,7 @@ class Ed25519PublicKey extends PublicKey {
     /**
      * The public key.
      */
-    publicKey: HexEncodedString;
+    readonly publicKey: HexEncodedString;
 
     constructor(publicKey: HexEncodedString) {
         super(PublicKeyType.Ed25519);
