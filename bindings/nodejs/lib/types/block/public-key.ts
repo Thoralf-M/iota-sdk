@@ -1,7 +1,6 @@
 // Copyright 2023 IOTA Stiftung
 // SPDX-License-Identifier: Apache-2.0
 
-// Temp solution for not double parsing JSON
 import { HexEncodedString } from '../utils';
 
 /**
