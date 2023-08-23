@@ -36,4 +36,9 @@ class Ed25519PublicKey extends PublicKey {
     }
 }
 
-export { Ed25519PublicKey, PublicKey, PublicKeyType };
+const PublicKeyDiscriminator = {
+    property: 'type',
+    subTypes: [{ value: Ed25519PublicKey, name: PublicKeyType.Ed25519 as any }],
+};
+
+export { PublicKeyDiscriminator, Ed25519PublicKey, PublicKey, PublicKeyType };
