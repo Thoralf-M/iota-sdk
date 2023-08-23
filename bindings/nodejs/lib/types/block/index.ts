@@ -10,3 +10,4 @@ export * from './id';
 export * from './block';
 export * from './public-key';
 export * from './signature';
+export * from './mana-allotment';
