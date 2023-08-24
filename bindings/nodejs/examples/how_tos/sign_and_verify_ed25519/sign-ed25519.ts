@@ -62,11 +62,13 @@ async function run() {
             bip44Chain,
         );
         console.log(
-            `Public key: ${ed25519Signature.publicKey.publicKey}\nSignature: ${ed25519Signature.signature}`,
+            `Public key: ${ed25519Signature.ed25519PublicKey()}\nSignature: ${
+                ed25519Signature.signature
+            }`,
         );
 
         const bech32Address = Utils.hexPublicKeyToBech32Address(
-            ed25519Signature.publicKey.publicKey,
+            ed25519Signature.ed25519PublicKey(),
             'rms',
         );
         console.log('Address: ' + bech32Address);

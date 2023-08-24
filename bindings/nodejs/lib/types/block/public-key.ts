@@ -1,6 +1,7 @@
 // Copyright 2023 IOTA Stiftung
 // SPDX-License-Identifier: Apache-2.0
 
+import { plainToInstance } from 'class-transformer';
 import { HexEncodedString } from '../utils';
 
 /**
@@ -18,6 +19,15 @@ abstract class PublicKey {
 
     constructor(type: PublicKeyType) {
         this.type = type;
+    }
+    public static parse(data: any): PublicKey {
+        if (data.type == PublicKeyType.Ed25519) {
+            return plainToInstance(
+                Ed25519PublicKey,
+                data,
+            ) as any as Ed25519PublicKey;
+        }
+        throw new Error('Invalid JSON');
     }
 }
 

@@ -1,8 +1,13 @@
 // Copyright 2023 IOTA Stiftung
 // SPDX-License-Identifier: Apache-2.0
 
+import { plainToInstance, Type } from 'class-transformer';
 import { HexEncodedString } from '../utils';
-import { Ed25519PublicKey } from './public-key';
+import {
+    Ed25519PublicKey,
+    PublicKey,
+    PublicKeyDiscriminator,
+} from './public-key';
 
 /**
  * All of the signature types.
@@ -24,6 +29,16 @@ abstract class Signature {
     getType(): SignatureType {
         return this.type;
     }
+
+    public static parse(data: any): Signature {
+        if (data.type == SignatureType.Ed25519) {
+            return plainToInstance(
+                Ed25519Signature,
+                data,
+            ) as any as Ed25519Signature;
+        }
+        throw new Error('Invalid JSON');
+    }
 }
 
 /**
@@ -43,6 +58,13 @@ class Ed25519Signature extends Signature {
         super(SignatureType.Ed25519);
         this.publicKey = new Ed25519PublicKey(publicKey);
         this.signature = signature;
+    }
+
+    /**
+     * The hex encoded Ed25519 public key.
+     */
+    ed25519PublicKey(): HexEncodedString {
+        return this.publicKey.publicKey;
     }
 }
 
