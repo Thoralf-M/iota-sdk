@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 mod client;
+mod database;
 mod secret_manager;
 mod wallet;
 
@@ -65,6 +66,12 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("getClientFromWallet", wallet::get_client)?;
     cx.export_function("getSecretManagerFromWallet", wallet::get_secret_manager)?;
     cx.export_function("listenWallet", wallet::listen_wallet)?;
+
+    cx.export_function("customDatabase", database::custom_database)?;
+    cx.export_function("testCustomDatabase", database::test_custom_database)?;
+    cx.export_function("setCustomDatabase", database::set_custom_database)?;
+    cx.export_function("getCustomDatabase", database::get_custom_database)?;
+    cx.export_function("deleteCustomDatabase", database::delete_custom_database)?;
 
     Ok(())
 }

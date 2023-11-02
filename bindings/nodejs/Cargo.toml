@@ -18,6 +18,7 @@ crate-type = ["cdylib"]
 doc = false
 
 [dependencies]
+async-trait = { version = "0.1.73", default-features = false }
 iota-sdk-bindings-core = { path = "../core", default-features = false, features = [
     "events",
     "ledger_nano",
@@ -28,7 +29,6 @@ iota-sdk-bindings-core = { path = "../core", default-features = false, features 
     "mqtt",
     "private_key_secret_manager",
 ] }
-
 log = { version = "0.4.20", default-features = false }
 neon = { version = "0.10.1", default-features = false, features = [
     "napi-6",

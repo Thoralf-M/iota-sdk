@@ -39,3 +39,10 @@ export * from './types';
 export * from './utils';
 export * from './wallet';
 export * from './logger';
+export {
+    customDatabase,
+    testCustomDatabase,
+    getCustomDatabase,
+    setCustomDatabase,
+    deleteCustomDatabase,
+} from './bindings';

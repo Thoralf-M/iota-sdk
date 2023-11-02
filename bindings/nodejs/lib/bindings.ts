@@ -27,6 +27,11 @@ const {
     getClientFromWallet,
     getSecretManagerFromWallet,
     migrateStrongholdSnapshotV2ToV3,
+    customDatabase,
+    testCustomDatabase,
+    getCustomDatabase,
+    setCustomDatabase,
+    deleteCustomDatabase,
 } = addon;
 
 const callClientMethodAsync = (
@@ -116,4 +121,9 @@ export {
     getSecretManagerFromWallet,
     listenMqtt,
     migrateStrongholdSnapshotV2ToV3,
+    customDatabase,
+    testCustomDatabase,
+    getCustomDatabase,
+    setCustomDatabase,
+    deleteCustomDatabase,
 };

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use iota_sdk_bindings_core::{
     call_wallet_method as rust_call_wallet_method,
     iota_sdk::wallet::{
-        events::types::{Event, WalletEventType},
+        events::types::{WalletEvent, WalletEventType},
         Wallet,
     },
     Response, Result, WalletMethod, WalletOptions,
@@ -70,7 +70,7 @@ impl WalletMethodHandler {
 
 impl Finalize for WalletMethodHandler {}
 
-fn call_event_callback(channel: &neon::event::Channel, event_data: Event, callback: Arc<JsCallback>) {
+fn call_event_callback(channel: &neon::event::Channel, event_data: WalletEvent, callback: Arc<JsCallback>) {
     channel.send(move |mut cx| {
         let cb = (*callback).to_inner(&mut cx);
         let this = cx.undefined();
