@@ -362,7 +362,7 @@ required-features = ["client"]
 [[example]]
 name = "output_features"
 path = "examples/how_tos/outputs/features.rs"
-required-features = ["client"]
+required-features = ["client", "wallet", "stronghold", "irc_27", "irc_30"]
 
 # Client Examples
 

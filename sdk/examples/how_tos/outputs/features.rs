@@ -11,66 +11,171 @@
 use iota_sdk::{
     client::Client,
     types::block::{
-        address::Address,
+        address::{AccountAddress, MultiAddress, WeightedAddress},
         output::{
-            feature::{IssuerFeature, MetadataFeature, SenderFeature, TagFeature},
-            unlock_condition::AddressUnlockCondition,
-            NftId, NftOutputBuilder,
+            feature::{Irc27Metadata, Irc30Metadata, IssuerFeature, MetadataFeature, SenderFeature, TagFeature},
+            unlock_condition::{
+                AddressUnlockCondition, ExpirationUnlockCondition, ImmutableAccountAddressUnlockCondition,
+                StorageDepositReturnUnlockCondition, TimelockUnlockCondition,
+            },
+            AccountOutputBuilder, BasicOutputBuilder, DelegationId, DelegationOutputBuilder, Feature,
+            FoundryOutputBuilder, NftId, NftOutputBuilder, SimpleTokenScheme, TokenScheme, UnlockCondition,
         },
     },
+    wallet::FilterOptions,
+    Wallet,
 };
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // This example uses secrets in environment variables for simplicity which should not be done in production.
-    dotenvy::dotenv().ok();
+    let logger_output_config = fern_logger::LoggerOutputConfigBuilder::new()
+        .name("wallet.log")
+        .target_exclusions(&["h2", "hyper", "rustls"])
+        .level_filter(log::LevelFilter::Debug);
+    let config = fern_logger::LoggerConfig::build()
+        .with_output(logger_output_config)
+        .finish();
+    fern_logger::logger_init(config).unwrap();
 
-    for var in ["NODE_URL"] {
-        std::env::var(var).expect(&format!(".env variable '{var}' is undefined, see .env.example"));
-    }
+    let wallet = Wallet::builder()
+        .with_storage_path(&"./cli/stardust-cli-wallet-db")
+        .finish()
+        .await?;
+    // needs to be copied from cli dir to dir where this example runs
+    wallet.set_stronghold_password("test".to_string()).await?;
 
-    let node_url = std::env::var("NODE_URL").unwrap();
+    wallet.sync(None).await?;
 
-    // Create a client instance.
-    let client = Client::builder().with_node(&node_url)?.finish().await?;
+    let unspent_basic_output = wallet
+        .ledger()
+        .await
+        .filtered_unspent_outputs(FilterOptions {
+            output_types: Some(vec![0]),
+            ..Default::default()
+        })
+        .next()
+        .unwrap()
+        .clone();
 
-    let storage_score_params = client.get_storage_score_parameters().await?;
+    let account_output_data = wallet.ledger().await.accounts().next().unwrap().clone();
+    let account_address = AccountAddress::from(
+        account_output_data
+            .output
+            .as_account()
+            .account_id_non_null(&account_output_data.output_id),
+    );
 
-    let address = Address::try_from_bech32("rms1qpllaj0pyveqfkwxmnngz2c488hfdtmfrj3wfkgxtk4gtyrax0jaxzt70zy")?;
+    let protocol_parameters = wallet.client().get_protocol_parameters().await?;
+    let storage_score_params = wallet.client().get_storage_score_parameters().await?;
+    let issuance = wallet.client().get_issuance().await?;
+    let latest_slot_commitment_id = issuance.latest_commitment.id();
 
-    let nft_output_builder = NftOutputBuilder::new_with_minimum_amount(storage_score_params, NftId::null())
-        .add_unlock_condition(AddressUnlockCondition::new(address.clone()));
-
-    let outputs = [
-        // with sender feature
-        nft_output_builder
-            .clone()
-            .add_feature(SenderFeature::new(address.clone()))
+    let outputs = vec![
+        BasicOutputBuilder::new_with_minimum_amount(storage_score_params)
+            .add_unlock_condition(UnlockCondition::Address(AddressUnlockCondition::new(
+                wallet.address().await,
+            )))
             .finish_output()?,
-        // with issuer feature
-        nft_output_builder
-            .clone()
-            .add_immutable_feature(IssuerFeature::new(address))
+        // Enable when https://github.com/iotaledger/inx-indexer/issues/179 is fixed
+        // BasicOutputBuilder::new_with_minimum_amount(storage_score_params)
+        //     .with_mana(unspent_basic_output.output.available_mana(
+        //         &protocol_parameters,
+        //         unspent_basic_output.output_id.transaction_id().slot_index(),
+        //         wallet.client().get_slot_index().await?,
+        //     )?)
+        //     .add_unlock_condition(UnlockCondition::Address(AddressUnlockCondition::new(
+        //         MultiAddress::new(
+        //             [
+        //                 WeightedAddress::new(wallet.address().await.into_inner(), 1)?,
+        //                 WeightedAddress::new(account_address, 1)?,
+        //             ],
+        //             1,
+        //         )?,
+        //     )))
+        //     .finish_output()?,
+        BasicOutputBuilder::new_with_amount(1_000_000)
+            .add_unlock_condition(UnlockCondition::Address(AddressUnlockCondition::new(
+                wallet.address().await,
+            )))
+            .add_feature(TagFeature::new("Hello, Alphanet!")?)
+            .add_feature(MetadataFeature::new([("Hello".to_owned(), b"Alphanet!".to_vec())])?)
             .finish_output()?,
-        // with metadata feature block
-        nft_output_builder
-            .clone()
-            .add_feature(MetadataFeature::new([("Hello".to_owned(), b"World!".to_vec())])?)
+        BasicOutputBuilder::new_with_amount(1_000_000)
+            .with_unlock_conditions([
+                UnlockCondition::Address(AddressUnlockCondition::new(wallet.address().await)),
+                UnlockCondition::Expiration(ExpirationUnlockCondition::new(
+                    wallet.address().await,
+                    wallet.client().get_slot_index().await? + 5000,
+                )?),
+                UnlockCondition::Timelock(TimelockUnlockCondition::new(
+                    wallet.client().get_slot_index().await? + 100,
+                )?),
+                UnlockCondition::StorageDepositReturn(StorageDepositReturnUnlockCondition::new(
+                    wallet.address().await,
+                    500_000,
+                )?),
+            ])
+            .add_feature(SenderFeature::new(wallet.address().await))
             .finish_output()?,
-        // with immutable metadata feature block
-        nft_output_builder
-            .clone()
-            .add_immutable_feature(MetadataFeature::new([("Hello".to_owned(), b"World!".to_vec())])?)
+        NftOutputBuilder::new_with_amount(1_000_000, NftId::null())
+            .with_unlock_conditions([
+                UnlockCondition::Address(AddressUnlockCondition::new(wallet.address().await)),
+                UnlockCondition::Expiration(ExpirationUnlockCondition::new(
+                    wallet.address().await,
+                    wallet.client().get_slot_index().await? + 5000,
+                )?),
+            ])
+            .add_immutable_feature(IssuerFeature::new(wallet.address().await))
             .finish_output()?,
-        // with tag feature
-        nft_output_builder
-            .add_feature(TagFeature::new("Hello, World!")?)
+        NftOutputBuilder::new_with_amount(1_000_000, NftId::null())
+            .with_unlock_conditions([UnlockCondition::Address(AddressUnlockCondition::new(
+                wallet.address().await,
+            ))])
+            .add_immutable_feature(Feature::Metadata(
+                Irc27Metadata::new(
+                    "video/mp4",
+                    "https://ipfs.io/ipfs/QmPoYcVm9fx47YXNTkhpMEYSxCD3Bqh7PJYr7eo5YjLgiT"
+                        .parse()
+                        .unwrap(),
+                    format!("Alphanet OG NFT 0"),
+                )
+                .with_issuer_name("Rekt wallet")
+                .with_collection_name("Alpha")
+                .try_into()?,
+            ))
             .finish_output()?,
+        DelegationOutputBuilder::new_with_amount(1_000_000, DelegationId::null(), account_address)
+            .add_unlock_condition(AddressUnlockCondition::new(wallet.address().await))
+            .with_start_epoch(protocol_parameters.delegation_start_epoch(latest_slot_commitment_id))
+            .finish_output()?,
+        AccountOutputBuilder::from(account_output_data.output.as_account())
+            .with_account_id(*account_address.account_id())
+            .with_mana(account_output_data.output.available_mana(
+                &protocol_parameters,
+                account_output_data.output_id.transaction_id().slot_index(),
+                wallet.client().get_slot_index().await?,
+            )?)
+            .with_foundry_counter(account_output_data.output.as_account().foundry_counter() + 1)
+            .finish_output()?,
+        FoundryOutputBuilder::new_with_minimum_amount(
+            storage_score_params,
+            account_output_data.output.as_account().foundry_counter() + 1,
+            TokenScheme::Simple(SimpleTokenScheme::new(100, 0, 1000)?),
+        )
+        .add_unlock_condition(ImmutableAccountAddressUnlockCondition::new(account_address))
+        .add_immutable_feature(Feature::Metadata(
+            Irc30Metadata::new("My Native Token", "REKT", 10)
+                .with_description("A native token to test the iota-sdk.")
+                .try_into()?,
+        ))
+        .finish_output()?,
     ];
 
-    // Convert output array to json array
-    let json_outputs = serde_json::to_string_pretty(&outputs)?;
-    println!("{json_outputs}");
+    let transaction = wallet.send_outputs(outputs, None).await?;
+    println!(
+        "Transaction {} sent\nBlock {:?}\n{transaction:?}",
+        transaction.transaction_id, transaction.block_id
+    );
 
     Ok(())
 }
