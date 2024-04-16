@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #[cfg(feature = "wallet")]
-use crate::{client::ClientMethodHandler, secret_manager::SecretManagerMethodHandler};
+use std::sync::Arc;
+
 #[cfg(feature = "wallet")]
 use iota_sdk_bindings_core::{
     call_wallet_method,
@@ -13,13 +14,14 @@ use iota_sdk_bindings_core::{
     Response, WalletMethod, WalletOptions,
 };
 #[cfg(feature = "wallet")]
-use std::sync::Arc;
-#[cfg(feature = "wallet")]
 use tokio::sync::{
     mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
     Mutex,
 };
 use wasm_bindgen::{prelude::wasm_bindgen, JsValue};
+
+#[cfg(feature = "wallet")]
+use crate::{client::ClientMethodHandler, secret_manager::SecretManagerMethodHandler};
 
 #[cfg(feature = "wallet")]
 /// The Wallet method handler.
