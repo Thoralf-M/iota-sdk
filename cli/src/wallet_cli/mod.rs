@@ -14,7 +14,7 @@ use iota_sdk::{
         address::{AccountAddress, Bech32Address, ToBech32Ext},
         mana::ManaAllotment,
         output::{
-            feature::{BlockIssuerKeySource, MetadataFeature},
+            feature::{BlockIssuerKeySource, Ed25519PublicKeyHashBlockIssuerKey, MetadataFeature},
             unlock_condition::AddressUnlockCondition,
             AccountId, BasicOutputBuilder, DelegationId, FoundryId, NativeToken, NativeTokensBuilder, NftId, Output,
             OutputId, TokenId,
@@ -26,8 +26,8 @@ use iota_sdk::{
     utils::ConvertTo,
     wallet::{
         types::OutputData, BeginStakingParams, ConsolidationParams, CreateDelegationParams, CreateNativeTokenParams,
-        MintNftParams, OutputsToClaim, ReturnStrategy, SendManaParams, SendNativeTokenParams, SendNftParams,
-        SendParams, SyncOptions, Wallet, WalletError,
+        MintNftParams, ModifyAccountBlockIssuerKey, OutputsToClaim, ReturnStrategy, SendManaParams,
+        SendNativeTokenParams, SendNftParams, SendParams, SyncOptions, Wallet, WalletError,
     },
     U256,
 };
@@ -196,6 +196,22 @@ pub enum WalletCommand {
     },
     /// Lists the implicit accounts of the wallet.
     ImplicitAccounts,
+    /// Adds a block issuer key to an account.
+    AddBlockIssuerKey {
+        /// The account to which the key should be added.
+        account_id: AccountId,
+        /// The hex-encoded public key to add.
+        // TODO: Use the actual type somehow?
+        block_issuer_key: String,
+    },
+    /// Removes a block issuer key from an account.
+    RemoveBlockIssuerKey {
+        /// The account from which the key should be removed.
+        account_id: AccountId,
+        /// The hex-encoded public key to remove.
+        // TODO: Use the actual type somehow?
+        block_issuer_key: String,
+    },
     /// Mint additional native tokens.
     MintNativeToken {
         /// Token ID to be minted, e.g. 0x087d205988b733d97fb145ae340e27a8b19554d1ceee64574d7e5ff66c45f69e7a0100000000.
@@ -552,7 +568,7 @@ pub async fn claim_command(wallet: &Wallet, output_id: Option<OutputId>) -> Resu
     if let Some(output_id) = output_id {
         println_log_info!("Claiming output {output_id}");
 
-        let transaction = wallet.claim_outputs([output_id]).await?;
+        let transaction = wallet.claim_outputs([output_id], None).await?;
 
         println_log_info!(
             "Claiming transaction sent:\n{:?}\n{:?}",
@@ -571,7 +587,7 @@ pub async fn claim_command(wallet: &Wallet, output_id: Option<OutputId>) -> Resu
         // Doing chunks of only 60, because we might need to create the double amount of outputs, because of potential
         // storage deposit return unlock conditions and also consider the remainder output.
         for output_ids_chunk in output_ids.chunks(60) {
-            let transaction = wallet.claim_outputs(output_ids_chunk.to_vec()).await?;
+            let transaction = wallet.claim_outputs(output_ids_chunk.to_vec(), None).await?;
             println_log_info!(
                 "Claiming transaction sent:\n{:?}\n{:?}",
                 transaction.transaction_id,
@@ -920,6 +936,46 @@ pub async fn implicit_accounts_command(wallet: &Wallet) -> Result<(), Error> {
             "BIC:"
         );
     }
+
+    Ok(())
+}
+
+// `add-block-issuer-key` command
+pub async fn add_block_issuer_key(wallet: &Wallet, account_id: AccountId, issuer_key: &str) -> Result<(), Error> {
+    let issuer_key: [u8; Ed25519PublicKeyHashBlockIssuerKey::LENGTH] = prefix_hex::decode(issuer_key)?;
+    let params = ModifyAccountBlockIssuerKey {
+        account_id,
+        keys_to_add: vec![Ed25519PublicKeyHashBlockIssuerKey::new(issuer_key).into()],
+        keys_to_remove: vec![],
+    };
+
+    let transaction = wallet.modify_account_output_block_issuer_keys(params, None).await?;
+
+    println_log_info!(
+        "Block issuer key adding transaction sent:\n{:?}\n{:?}",
+        transaction.transaction_id,
+        transaction.block_id
+    );
+
+    Ok(())
+}
+
+// `remove-block-issuer-key` command
+pub async fn remove_block_issuer_key(wallet: &Wallet, account_id: AccountId, issuer_key: &str) -> Result<(), Error> {
+    let issuer_key: [u8; Ed25519PublicKeyHashBlockIssuerKey::LENGTH] = prefix_hex::decode(issuer_key)?;
+    let params = ModifyAccountBlockIssuerKey {
+        account_id,
+        keys_to_add: vec![],
+        keys_to_remove: vec![Ed25519PublicKeyHashBlockIssuerKey::new(issuer_key).into()],
+    };
+
+    let transaction = wallet.modify_account_output_block_issuer_keys(params, None).await?;
+
+    println_log_info!(
+        "Block issuer key removing transaction sent:\n{:?}\n{:?}",
+        transaction.transaction_id,
+        transaction.block_id
+    );
 
     Ok(())
 }
@@ -1580,6 +1636,20 @@ pub async fn prompt_internal(
                             implicit_account_transition_command(wallet, output_id).await
                         }
                         WalletCommand::ImplicitAccounts => implicit_accounts_command(wallet).await,
+                        WalletCommand::AddBlockIssuerKey {
+                            account_id,
+                            block_issuer_key,
+                        } => {
+                            ensure_password(wallet).await?;
+                            add_block_issuer_key(wallet, account_id, &block_issuer_key).await
+                        }
+                        WalletCommand::RemoveBlockIssuerKey {
+                            account_id,
+                            block_issuer_key,
+                        } => {
+                            ensure_password(wallet).await?;
+                            remove_block_issuer_key(wallet, account_id, &block_issuer_key).await
+                        }
                         WalletCommand::MeltNativeToken { token_id, amount } => {
                             ensure_password(wallet).await?;
                             melt_native_token_command(wallet, token_id, amount).await
@@ -1695,14 +1765,14 @@ pub async fn prompt_internal(
     Ok(PromptResponse::Reprompt)
 }
 
-fn print_outputs(mut outputs: Vec<OutputData>, title: &str) -> Result<(), Error> {
-    if outputs.is_empty() {
+fn print_outputs(mut outputs_data: Vec<OutputData>, title: &str) -> Result<(), Error> {
+    if outputs_data.is_empty() {
         println_log_info!("No outputs found");
     } else {
         println_log_info!("{title}");
-        outputs.sort_unstable_by_key(|o| o.output_id);
+        outputs_data.sort_unstable_by_key(|o| o.output_id);
 
-        for (i, output_data) in outputs.into_iter().enumerate() {
+        for (i, output_data) in outputs_data.into_iter().enumerate() {
             let kind_str = if output_data.output.is_implicit_account() {
                 "ImplicitAccount"
             } else {
